@@ -181,7 +181,7 @@ class DuplicateFinderApp:
 
         heic_label = "HEIC support: available" if HEIC_AVAILABLE else "HEIC support: not available (pillow-heif not installed)"
         Label(opts_frame, text=heic_label,
-              fg="green" if HEIC_AVAILABLE else "red").pack(anchor=W, pady=(2, 0))
+              fg="green" if HEIC_AVAILABLE else "red").pack(anchor=W, pady=2)
 
         # --- Buttons ---
         btn_frame = Frame(self.root, padx=10, pady=5)
@@ -208,7 +208,7 @@ class DuplicateFinderApp:
         self.progress.pack(fill=X)
 
         self.status_var = StringVar(value="Ready — select a folder and click Find Duplicates")
-        Label(prog_frame, textvariable=self.status_var, anchor=W).pack(fill=X, pady=(2, 0))
+        Label(prog_frame, textvariable=self.status_var, anchor=W).pack(fill=X, pady=2)
 
         self.phase_var = StringVar(value="")
         self.phase_label = Label(
@@ -218,7 +218,7 @@ class DuplicateFinderApp:
         self.phase_label.pack(fill=X)
 
         # --- Log ---
-        log_frame = Frame(self.root, padx=10, pady=(0, 10))
+        log_frame = Frame(self.root, padx=10, pady=10)
         log_frame.pack(fill=BOTH, expand=True, side=TOP)
 
         scrollbar = Scrollbar(log_frame)
