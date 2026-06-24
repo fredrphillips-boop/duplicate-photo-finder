@@ -30,13 +30,24 @@ try:
 except ImportError:
     HEIC_AVAILABLE = False
 
-VERSION = "1.0.6"
+VERSION = "1.0.7"
 
 
-def app_dir():
+def output_dir():
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+        d = os.path.dirname(sys.executable)
+    else:
+        d = os.path.dirname(os.path.abspath(__file__))
+    try:
+        test_file = os.path.join(d, '.write_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        return d
+    except OSError:
+        docs = os.path.join(Path.home(), 'Documents', 'DuplicatePhotoFinder')
+        os.makedirs(docs, exist_ok=True)
+        return docs
 
 
 def safe_name(folder_path):
@@ -423,7 +434,7 @@ class DuplicateFinderApp:
                 )
 
         # Save cache next to app
-        out_dir = app_dir()
+        out_dir = output_dir()
         folder_label = safe_name(folder)
         cache_path = os.path.join(out_dir, f"scan_cache_{folder_label}.json")
         with open(cache_path, 'w') as f:
