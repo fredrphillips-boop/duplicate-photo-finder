@@ -30,7 +30,7 @@ try:
 except ImportError:
     HEIC_AVAILABLE = False
 
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 EXTS = {'.jpg', '.jpeg', '.png', '.heic', '.gif', '.bmp', '.tif', '.tiff'}
 THRESH = 1.5
 PLATFORM = platform.system()
@@ -598,12 +598,8 @@ class DuplicateFinderApp:
 
     def _open_report(self):
         if self.report_path and os.path.exists(self.report_path):
-            if PLATFORM == 'Windows':
-                os.startfile(self.report_path)
-            elif PLATFORM == 'Darwin':
-                subprocess.Popen(['open', self.report_path])
-            else:
-                subprocess.Popen(['xdg-open', self.report_path])
+            url = Path(self.report_path).resolve().as_uri()
+            webbrowser.open(url)
 
 
 def main():
