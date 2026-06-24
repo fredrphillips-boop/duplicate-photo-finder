@@ -17,7 +17,7 @@ from pathlib import Path
 from tkinter import (
     Tk, Frame, Label, Button, Entry, StringVar,
     Text, Scrollbar, filedialog, messagebox,
-    END, DISABLED, NORMAL, RIGHT, LEFT, BOTH, Y, X, TOP, BOTTOM, W,
+    END, DISABLED, NORMAL, RIGHT, LEFT, BOTH, Y, X, TOP, BOTTOM, W, E,
 )
 from tkinter.ttk import Progressbar
 
