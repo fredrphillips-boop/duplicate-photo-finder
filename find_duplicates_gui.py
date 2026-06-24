@@ -30,7 +30,19 @@ try:
 except ImportError:
     HEIC_AVAILABLE = False
 
-VERSION = "1.0.5"
+VERSION = "1.0.6"
+
+
+def app_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def safe_name(folder_path):
+    name = os.path.basename(os.path.normpath(folder_path))
+    safe = ''.join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in name)
+    return safe.strip() or 'scan'
 EXTS = {'.jpg', '.jpeg', '.png', '.heic', '.gif', '.bmp', '.tif', '.tiff'}
 THRESH = 1.5
 PLATFORM = platform.system()
@@ -410,8 +422,10 @@ class DuplicateFinderApp:
                     f"Step 2 of 4: Scanning images — {done}/{total} ({pct:.0f}%) — {eta_str}"
                 )
 
-        # Save cache next to report
-        cache_path = os.path.join(folder, "scan_cache.json")
+        # Save cache next to app
+        out_dir = app_dir()
+        folder_label = safe_name(folder)
+        cache_path = os.path.join(out_dir, f"scan_cache_{folder_label}.json")
         with open(cache_path, 'w') as f:
             json.dump(data, f)
         self._log(f"Cache saved: {cache_path}")
@@ -579,7 +593,7 @@ class DuplicateFinderApp:
         html.append(f'&copy; {time.strftime("%Y")} Fred R Phillips. All rights reserved.</div>')
         html.append('</body></html>')
 
-        report_path = os.path.join(folder, "DUPLICATES.html")
+        report_path = os.path.join(out_dir, f"DUPLICATES_{folder_label}.html")
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write('\n'.join(html))
 
