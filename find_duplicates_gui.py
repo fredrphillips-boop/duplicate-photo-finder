@@ -9,6 +9,7 @@ import platform
 import subprocess
 import hashlib
 import json
+import re
 import time
 import threading
 import webbrowser
@@ -30,7 +31,7 @@ try:
 except ImportError:
     HEIC_AVAILABLE = False
 
-VERSION = "1.0.8"
+VERSION = "1.0.9"
 
 
 def output_dir():
@@ -173,6 +174,86 @@ def fmt_size(n):
             return f"{n:.1f}{unit}"
         n /= 1024
     return f"{n:.1f}TB"
+
+
+ALBUM_KEYWORDS = ['album', 'favorites', 'favourites', 'best of', 'picks',
+                   'selected', 'shared', 'collage', 'highlights', 'edited',
+                   'copies', 'backup']
+SEQUENCE_KEYWORDS = ['dcim', 'camera', 'camera roll', 'photo library',
+                     'import', 'original', 'originals']
+
+
+def recommend_keep_remove(group):
+    """Score files in a duplicate group. Returns [(item, 'keep'|'remove', reason)]."""
+    if len(group) < 2:
+        return [(group[0], 'keep', 'Only copy')]
+
+    scored = []
+    for item in group:
+        scored.append({'item': item, 'score': 0,
+                       'keep_reasons': [], 'remove_reasons': []})
+
+    max_size = max(s['item']['size'] for s in scored)
+    min_size = min(s['item']['size'] for s in scored)
+    if max_size != min_size:
+        for s in scored:
+            if s['item']['size'] == max_size:
+                s['score'] += 3
+                s['keep_reasons'].append('Largest file')
+            else:
+                s['remove_reasons'].append('Smaller file')
+
+    has_res = all(s['item'].get('w') and s['item'].get('h') for s in scored)
+    if has_res:
+        pixels = [s['item']['w'] * s['item']['h'] for s in scored]
+        max_px, min_px = max(pixels), min(pixels)
+        if max_px != min_px:
+            for s, px in zip(scored, pixels):
+                if px == max_px:
+                    s['score'] += 2
+                    s['keep_reasons'].append('Highest resolution')
+                else:
+                    s['remove_reasons'].append('Lower resolution')
+
+    for s in scored:
+        path = s['item']['path']
+        parent = os.path.basename(os.path.dirname(path)).lower()
+        grandparent = os.path.basename(
+            os.path.dirname(os.path.dirname(path))).lower()
+        folder_ctx = parent + ' ' + grandparent
+
+        if any(kw in folder_ctx for kw in ALBUM_KEYWORDS):
+            s['score'] -= 2
+            s['remove_reasons'].append('Album folder (likely copy)')
+        if any(kw in folder_ctx for kw in SEQUENCE_KEYWORDS):
+            s['score'] += 1
+            s['keep_reasons'].append('Original sequence')
+        elif re.search(r'20\d{2}[-_./]\d{2}', folder_ctx):
+            s['score'] += 1
+            s['keep_reasons'].append('Date-organized folder')
+
+    mtimes = [s['item'].get('mtime', float('inf')) for s in scored]
+    if len(set(mtimes)) > 1 and not all(m == float('inf') for m in mtimes):
+        earliest = min(mtimes)
+        for s, mt in zip(scored, mtimes):
+            if mt == earliest:
+                s['score'] += 1
+                s['keep_reasons'].append('Earliest file date')
+            elif mt != float('inf'):
+                s['remove_reasons'].append('Later copy')
+
+    max_score = max(s['score'] for s in scored)
+    keep_assigned = False
+    results = []
+    for s in sorted(scored, key=lambda x: (-x['score'], x['item']['path'])):
+        if s['score'] == max_score and not keep_assigned:
+            reason = ', '.join(s['keep_reasons']) if s['keep_reasons'] else 'Best candidate'
+            results.append((s['item'], 'keep', reason))
+            keep_assigned = True
+        else:
+            reason = ', '.join(s['remove_reasons']) if s['remove_reasons'] else 'Redundant copy'
+            results.append((s['item'], 'remove', reason))
+    return results
 
 
 class DuplicateFinderApp:
@@ -387,6 +468,7 @@ class DuplicateFinderApp:
         for i, path in enumerate(files):
             try:
                 size = os.path.getsize(path)
+                mtime = os.path.getmtime(path)
                 h = hashlib.sha256()
                 with open(path, 'rb') as fh:
                     for chunk in iter(lambda: fh.read(65536), b''):
@@ -402,8 +484,8 @@ class DuplicateFinderApp:
                             w, hgt = img_w, img_h
                 except Exception:
                     dh, w, hgt = None, None, None
-                data.append({'path': path, 'size': size, 'sha256': sha,
-                             'dhash': dh, 'w': w, 'h': hgt})
+                data.append({'path': path, 'size': size, 'mtime': mtime,
+                             'sha256': sha, 'dhash': dh, 'w': w, 'h': hgt})
             except Exception as e:
                 errors += 1
                 if errors <= 20:
@@ -523,6 +605,12 @@ class DuplicateFinderApp:
         html.append('ul { padding-left: 24px; }')
         html.append('li { margin: 2px 0; }')
         html.append('hr { border: none; border-top: 1px solid #ccc; margin: 24px 0; }')
+        html.append('.keep { background: #E8F5E9; border-left: 3px solid #2E7D32; padding: 6px 10px; margin: 3px 0; }')
+        html.append('.remove { background: #FFEBEE; border-left: 3px solid #D32F2F; padding: 6px 10px; margin: 3px 0; }')
+        html.append('.keep-tag { background: #2E7D32; color: white; padding: 2px 8px; border-radius: 3px; font-size: 0.85em; font-weight: bold; margin-right: 6px; }')
+        html.append('.remove-tag { background: #D32F2F; color: white; padding: 2px 8px; border-radius: 3px; font-size: 0.85em; font-weight: bold; margin-right: 6px; }')
+        html.append('.reason { color: #666; font-size: 0.85em; font-style: italic; }')
+        html.append('.legend { background: #F5F5F5; border: 1px solid #ddd; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }')
         html.append('.footer { color: #888; font-size: 0.85em; margin-top: 40px; border-top: 1px solid #ccc; padding-top: 8px; }')
         html.append('</style></head><body>')
 
@@ -551,6 +639,13 @@ class DuplicateFinderApp:
         html.append('<span class="warning">DO NOT DELETE — these are different photos.</span> Listed for your awareness only.</p>')
         html.append('</div>')
 
+        html.append('<div class="legend">')
+        html.append('<h3>Color Key</h3>')
+        html.append('<p><span class="keep-tag">KEEP</span> Recommended to keep — best quality, original location, or earliest file date.</p>')
+        html.append('<p><span class="remove-tag">REMOVE</span> Recommended to remove — redundant copy, lower quality, or album duplicate.</p>')
+        html.append('<p class="muted">Recommendations are based on file size, resolution, folder location, and file date. Always verify before deleting.</p>')
+        html.append('</div>')
+
         html.append(f'<p><strong>Bottom line:</strong> Sections 1 and 2 found <strong>{safe_delete} files</strong> that can be safely removed.<br>')
         html.append('Section 3 photos are NOT duplicates — review them manually if you wish.</p>')
 
@@ -560,10 +655,13 @@ class DuplicateFinderApp:
         html.append('Keep one copy from each group and delete the rest.</p>')
         for i, g in enumerate(real_exact, 1):
             html.append(f'<h3>Group E{i} — {fmt_size(g[0]["size"])}, {g[0]["w"]}x{g[0]["h"]}</h3>')
-            html.append('<ul>')
-            for item in g:
-                html.append(f'<li>{h(item["path"])}</li>')
-            html.append('</ul>')
+            recs = recommend_keep_remove(g)
+            for item, action, reason in recs:
+                tag = 'keep' if action == 'keep' else 'remove'
+                label = 'KEEP' if action == 'keep' else 'REMOVE'
+                html.append(f'<div class="{tag}"><span class="{tag}-tag">{label}</span> '
+                            f'{h(item["path"])} '
+                            f'<span class="reason">— {h(reason)}</span></div>')
 
         if zero_byte:
             html.append('<h2>1b. Empty / corrupted files (0 bytes)</h2>')
@@ -579,10 +677,13 @@ class DuplicateFinderApp:
         html.append('Keep the highest quality version (usually the largest file) and delete the rest.</p>')
         for i, (g, d) in enumerate(confirmed, 1):
             html.append(f'<h3>Group P{i} <span class="muted">(pixel-diff {d:.2f}/255)</span></h3>')
-            html.append('<ul>')
-            for item in g:
-                html.append(f'<li>{h(item["path"])} — {fmt_size(item["size"])}, {item["w"]}x{item["h"]}</li>')
-            html.append('</ul>')
+            recs = recommend_keep_remove(g)
+            for item, action, reason in recs:
+                tag = 'keep' if action == 'keep' else 'remove'
+                label = 'KEEP' if action == 'keep' else 'REMOVE'
+                html.append(f'<div class="{tag}"><span class="{tag}-tag">{label}</span> '
+                            f'{h(item["path"])} — {fmt_size(item["size"])}, {item["w"]}x{item["h"]} '
+                            f'<span class="reason">— {h(reason)}</span></div>')
 
         html.append(f'<h2>3. <span class="warning">DO NOT DELETE</span> — Similar but NOT identical photos</h2>')
         html.append(f'<p>These are different photos that look similar — burst shots, retakes, or similar compositions. {len(likely_different)} groups found.<br>')
