@@ -31,7 +31,7 @@ try:
 except ImportError:
     HEIC_AVAILABLE = False
 
-VERSION = "1.0.10"
+VERSION = "1.0.11"
 
 
 def output_dir():
@@ -706,6 +706,13 @@ class DuplicateFinderApp:
         html.append('</body></html>')
 
         report_path = os.path.join(out_dir, f"DUPLICATES_{folder_label}.html")
+        if os.path.exists(report_path):
+            mod = os.path.getmtime(report_path)
+            ts = time.strftime('%Y-%m-%d_%H%M%S', time.localtime(mod))
+            archive_name = f"DUPLICATES_{folder_label}_{ts}.html"
+            archive_path = os.path.join(out_dir, archive_name)
+            os.rename(report_path, archive_path)
+            self._log(f"Previous report archived: {archive_name}")
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write('\n'.join(html))
 
