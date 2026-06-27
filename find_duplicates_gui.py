@@ -31,7 +31,7 @@ try:
 except ImportError:
     HEIC_AVAILABLE = False
 
-VERSION = "1.0.9"
+VERSION = "1.0.10"
 
 
 def output_dir():
@@ -217,6 +217,12 @@ def recommend_keep_remove(group):
 
     for s in scored:
         path = s['item']['path']
+        filename = os.path.splitext(os.path.basename(path))[0].lower()
+        if re.search(r'[-_ ](copy|copia)(\s*\(\d+\))?$', filename) or \
+           re.search(r'\(\d+\)$', filename):
+            s['score'] -= 3
+            s['remove_reasons'].append('Filename indicates copy')
+
         parent = os.path.basename(os.path.dirname(path)).lower()
         grandparent = os.path.basename(
             os.path.dirname(os.path.dirname(path))).lower()
